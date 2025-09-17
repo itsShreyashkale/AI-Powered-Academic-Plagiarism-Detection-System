@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register | AI Plagiarism Detection</title>
+  <style>
+    body {
+      font-family: Inter, system-ui, sans-serif;
+      background: linear-gradient(135deg, #2563eb, #1e40af);
+      margin: 0; display: flex; justify-content: center; align-items: center;
+      height: 100vh; color: #111;
+    }
+    .card {
+      background: #fff; padding: 32px; border-radius: 14px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+      width: 100%; max-width: 420px; animation: fadeIn 0.4s ease;
+    }
+    h2 { margin-top: 0; color: #2563eb; font-size: 1.6rem; text-align: center; }
+    label { display: block; margin-bottom: 14px; font-size: 14px; color: #374151; }
+    input, select {
+      width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px;
+      margin-top: 6px; font-size: 14px; transition: border-color 0.2s;
+    }
+    input:focus, select:focus { border-color: #2563eb; outline: none; }
+    button {
+      width: 100%; background: #2563eb; color: #fff; border: none;
+      padding: 12px; border-radius: 8px; font-size: 15px; cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    button:hover { background: #1e40af; transform: translateY(-1px); }
+    .muted { font-size: 13px; color: #6b7280; margin-top: 14px; text-align: center; }
+    .error { color: #b91c1c; font-size: 13px; margin: 10px 0; text-align: center; }
+    .loading { font-size: 13px; color: #2563eb; margin: 10px 0; text-align: center; }
+    @keyframes fadeIn { from {opacity:0; transform:scale(0.96);} to {opacity:1; transform:scale(1);} }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>📝 Register</h2>
+    <form id="registerForm">
+      <label>Username
+        <input type="text" id="username" required placeholder="Choose a username">
+      </label>
+      <label>Email
+        <input type="email" id="email" required placeholder="Enter your email">
+      </label>
+      <label>Password
+        <input type="password" id="password" required placeholder="Enter password">
+      </label>
+      <label>Confirm Password
+        <input type="password" id="password2" required placeholder="Re-enter password">
+      </label>
+      <label>Role
+        <select id="role" required>
+          <option value="">-- Select Role --</option>
+          <option value="student">Student</option>
+          <option value="professor">Professor</option>
+        </select>
+      </label>
+      <button type="submit">Register</button>
+      <div id="msg"></div>
+    </form>
+    <div class="muted">
+      Already have an account? <a href="/login/">Login</a>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById("registerForm");
+    const msg = document.getElementById("msg");
+
+    function setMsg(text, type="error") {
+      msg.textContent = text;
+      msg.className = type;
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setMsg("⏳ Registering account...", "loading");
+
+      const username = document.getElementById("username").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const password2 = document.getElementById("password2").value;
+      const role = document.getElementById("role").value;
+
+      if (password !== password2) {
+        setMsg("❌ Passwords do not match.", "error");
+        return;
+      }
+
+      try {
+        // ✅ Register user
+        const res = await fetch("/api/users/register/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, email, password, password2, role })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          setMsg(data.detail || "Registration failed. Try again.", "error");
+          return;
+        }
+
+        // ✅ Auto login using username + password
+        const loginRes = await fetch("/api/users/login/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+        const loginData = await loginRes.json();
+
+        if (loginRes.ok && loginData.access) {
+          localStorage.setItem("access", loginData.access);
+          localStorage.setItem("refresh", loginData.refresh);
+          localStorage.setItem("role", role);
+
+          // Redirect by role
+          if (role === "student") {
+            window.location.href = "/student/";
+          } else if (role === "professor") {
+            window.location.href = "/professor/";
+          } else {
+            window.location.href = "/dashboard/";
+          }
+        } else {
+          alert("✅ Registration successful! Please login manually.");
+          window.location.href = "/login/";
+        }
+      } catch (err) {
+        console.error(err);
+        setMsg("⚠️ Error connecting to server.", "error");
+      }
+    });
+  </script>
+</body>
+</html>

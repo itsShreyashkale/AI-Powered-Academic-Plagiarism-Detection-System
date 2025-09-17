@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎓 Student Dashboard | AI Plagiarism Detection</title>
+  <style>
+    body {
+      font-family: Inter, system-ui, sans-serif;
+      background: #f9fafb;
+      margin: 0; padding: 20px;
+      color: #111;
+    }
+    h2, h3, h4 { margin: 0; }
+    .card {
+      background: #fff; padding: 20px; border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+    }
+    .btn {
+      background: #2563eb; color: #fff; border: none;
+      padding: 8px 14px; border-radius: 8px; cursor: pointer;
+      font-size: 14px; font-weight: 500; transition: background 0.2s;
+    }
+    .btn:hover { background: #1e40af; }
+    .btn-ghost {
+      background: transparent; color: #2563eb;
+      border: 1px solid #2563eb; padding: 7px 12px;
+      border-radius: 8px; cursor: pointer;
+    }
+    .btn-ghost:hover { background: #eff6ff; }
+    .muted { color: #6b7280; font-size: 14px; }
+    input, textarea {
+      width: 100%; padding: 8px; border: 1px solid #ddd;
+      border-radius: 6px; font-size: 14px;
+    }
+    textarea { resize: vertical; }
+  </style>
+</head>
+<body>
+  <div style="max-width:1200px;margin:0 auto;display:grid;gap:20px">
+
+    <!-- Header -->
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+      <div>
+        <h2>🎓 Student Dashboard</h2>
+        <p class="muted">Browse assignments, upload work, and track plagiarism reports.</p>
+      </div>
+      <button onclick="handleLogout()" class="btn-ghost">Logout</button>
+    </div>
+
+    <!-- Assignments -->
+    <div class="card">
+      <h3>📄 Available Assignments</h3>
+      <div id="assignmentsContainer" class="muted">Loading assignments…</div>
+    </div>
+
+  </div>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const container = document.getElementById("assignmentsContainer");
+
+    function setMsg(el, text, type="info") {
+      el.textContent = text || "";
+      el.style.color = (type === "error") ? "#b91c1c" : "#374151";
+    }
+    function fmtDate(dateStr) {
+      return dateStr ? new Date(dateStr).toLocaleString() : "—";
+    }
+
+    // Load assignments
+    async function loadAssignments() {
+      container.innerHTML = "Loading…";
+      try {
+        const res = await fetch("/api/documents/assignments/", {
+          headers: { "Authorization": "Bearer " + localStorage.getItem("access") }
+        });
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : (data.results || []);
+        if (!list.length) {
+          container.innerHTML = "<div class='muted'>📌 No assignments available yet.</div>";
+          return;
+        }
+        container.innerHTML = "";
+        list.forEach(a => renderAssignmentCard(a));
+      } catch (err) {
+        console.error("Assignments load error:", err);
+        container.innerHTML = "<div class='muted'>❌ Failed to load assignments.</div>";
+      }
+    }
+
+    // Render assignment card
+    function renderAssignmentCard(a) {
+      const card = document.createElement("div");
+      card.className = "card";
+      const fileLink = a.file_url
+        ? `<a href="${a.file_url}" target="_blank" class="btn-ghost">📂 Download</a>`
+        : "<span class='muted'>No file attached</span>";
+
+      card.innerHTML = `
+        <h4>${escapeHtml(a.title || "Untitled")}</h4>
+        <p class="muted">${escapeHtml(a.description || "No description provided.")}</p>
+        <p class="muted">Deadline: ${fmtDate(a.deadline)}</p>
+        <div style="margin:10px 0">${fileLink}</div>
+
+        <!-- Submission -->
+        <form id="submitForm-${a.id}" data-assignment="${a.id}" style="display:grid;gap:10px;margin-top:10px">
+          <label>
+            <div class="muted">Upload your work</div>
+            <input type="file" name="document" required>
+          </label>
+          <label>
+            <div class="muted">Feedback (optional)</div>
+            <textarea name="feedback" rows="2"></textarea>
+          </label>
+          <button type="submit" class="btn">⬆️ Submit</button>
+          <div class="muted" id="msg-${a.id}"></div>
+        </form>
+
+        <div id="mySubmission-${a.id}" class="muted" style="margin-top:12px">Checking your submission…</div>
+      `;
+
+      container.appendChild(card);
+      card.querySelector(`#submitForm-${a.id}`).addEventListener("submit", handleSubmission);
+      loadMySubmission(a.id);
+    }
+
+    // Handle submission
+    async function handleSubmission(e) {
+      e.preventDefault();
+      const form = e.target;
+      const assignmentId = form.dataset.assignment;
+      const msgBox = document.getElementById(`msg-${assignmentId}`);
+      setMsg(msgBox, "Uploading…");
+
+      const fd = new FormData(form);
+      fd.append("assignment", assignmentId);
+
+      try {
+        const res = await fetch("/api/documents/submissions/create/", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + localStorage.getItem("access") },
+          body: fd
+        });
+        const data = await res.json();
+        if (res.ok && data.id) {
+          setMsg(msgBox, "✅ Uploaded successfully.");
+          form.reset();
+          loadMySubmission(assignmentId);
+        } else {
+          setMsg(msgBox, data.detail || JSON.stringify(data) || "Upload failed.", "error");
+        }
+      } catch (err) {
+        console.error("Upload error:", err);
+        setMsg(msgBox, "Upload failed.", "error");
+      }
+    }
+
+    // Load student's submission
+    async function loadMySubmission(assignmentId) {
+      const box = document.getElementById(`mySubmission-${assignmentId}`);
+      try {
+        const res = await fetch(`/api/documents/submissions/mine/?assignment=${assignmentId}`, {
+          headers: { "Authorization": "Bearer " + localStorage.getItem("access") }
+        });
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : (data.results || []);
+        const s = list.find(item => String(item.assignment) === String(assignmentId));
+        if (!s) {
+          box.innerHTML = "<div class='muted'>No submission yet.</div>";
+          return;
+        }
+        const score = (s.similarity_score !== undefined) ? `${s.similarity_score}%` : "—";
+        const uploadedAt = fmtDate(s.uploaded_at || s.created_at);
+        box.innerHTML = `
+          <div style="padding:8px;border-radius:6px;background:#f3f4f6">
+            <p><strong>📤 Your Submission:</strong></p>
+            <p class="muted">File: <a href="${s.document_url}" target="_blank">View</a></p>
+            <p class="muted">Uploaded: ${uploadedAt}</p>
+            <p class="muted">Plagiarism Score: ${score}</p>
+          </div>`;
+      } catch (err) {
+        console.error("Submission load error:", err);
+        box.innerHTML = "<div class='muted'>❌ Failed to load submission.</div>";
+      }
+    }
+
+    // Logout
+    window.handleLogout = function() {
+      localStorage.removeItem("access");
+      localStorage.removeItem("refresh");
+      window.location.href = "/login/";
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Init
+    loadAssignments();
+  });
+  </script>
+</body>
+</html>

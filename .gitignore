@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+
+# Django
+/media/
+/staticfiles/
+
+# Environment
+env/
+.venv/
+*.env
+
+# VS Code
+.vscode/
+
+# Pytest & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+plagiarism_checks.log
+

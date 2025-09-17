@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Plagiarism — AI Detection</title>
+  <style>
+    :root{
+      --accent:#2563eb; --muted:#6b7280; --card:#fff; --bg:#f7f9fc;
+      --danger:#ef4444; --success:#16a34a;
+    }
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:#0f172a}
+    .wrap{max-width:1200px;margin:18px auto;padding:12px;display:grid;grid-template-columns:1fr 380px;gap:18px}
+    header.page{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .brand{font-weight:700;color:var(--accent);font-size:1.15rem}
+    .card{background:var(--card);padding:16px;border-radius:10px;box-shadow:0 6px 18px rgba(16,24,40,0.06)}
+    h2,h3{margin:0 0 8px 0}
+    .muted{color:var(--muted);font-size:13px}
+    select,input,button,textarea{font-family:inherit}
+    select,input,textarea{padding:8px;border:1px solid #e6e9ef;border-radius:8px;width:100%;box-sizing:border-box}
+    .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .btn{background:var(--accent);color:#fff;padding:8px 12px;border-radius:8px;border:0;cursor:pointer}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .btn-ghost{background:transparent;border:1px solid var(--accent);color:var(--accent);padding:8px 10px;border-radius:8px}
+    .list-scroll{max-height:56vh;overflow:auto;padding-right:6px}
+    .submission-row{padding:10px;border-radius:8px;background:#fbfdff;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+    .small-muted{font-size:13px;color:var(--muted)}
+    .alert{position:fixed;right:18px;top:18px;padding:12px 14px;border-radius:8px;z-index:9999;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+    .alert.success{background:#ecfdf5;color:#065f46}
+    .alert.error{background:#fff1f2;color:#9f1239}
+    #spinnerOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9998;align-items:center;justify-content:center}
+    .spinnerBox{background:#111;color:#fff;padding:12px;border-radius:10px;display:flex;gap:10px;align-items:center}
+    .spinner{width:14px;height:14px;border-radius:50%;border:3px solid rgba(255,255,255,0.18);border-top-color:rgba(255,255,255,0.95);animation:spin .9s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .result-box{padding:12px;border-radius:8px;background:#fff;margin-top:8px}
+    canvas#simChart{width:100%;height:90px;display:block}
+    .meta{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+    .kbd{background:#f1f5f9;padding:4px 8px;border-radius:6px;font-weight:600;color:#0f172a}
+    @media (max-width:980px){.wrap{grid-template-columns:1fr;padding:12px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="page">
+      <div>
+        <div class="brand">AI-Plagiarism</div>
+        <div class="muted" style="margin-top:4px">Plagiarism Dashboard — run checks & inspect saved reports</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <a href="/dashboard/" class="btn-ghost">Dashboard</a>
+        <a href="/profile/" class="btn-ghost">Profile</a>
+        <a href="/logout/" class="btn" id="logoutBtn">Logout</a>
+      </div>
+    </header>
+
+    <!-- Left: Controls + Result -->
+    <section class="card" aria-labelledby="plagHeader">
+      <h2 id="plagHeader">Run a plagiarism check</h2>
+      <div class="muted" style="margin-bottom:10px">Choose a submission (or use the side list), select algorithm and run. Results will show below; saved results can be viewed too.</div>
+
+      <div style="display:grid;gap:12px">
+        <div class="controls">
+          <label style="flex:1;min-width:200px">
+            <div class="small-muted">Submission</div>
+            <select id="selSubmission"><option>Loading…</option></select>
+          </label>
+
+          <label style="width:150px">
+            <div class="small-muted">Algorithm</div>
+            <select id="selAlgo">
+              <option value="TF-IDF">TF-IDF (fast)</option>
+              <option value="BERT">BERT (semantic)</option>
+            </select>
+          </label>
+
+          <div style="display:flex;gap:8px;align-items:flex-end">
+            <button id="btnRun" class="btn">Run Check</button>
+            <button id="btnView" class="btn-ghost">View Saved</button>
+          </div>
+        </div>
+
+        <div id="ctrlMsg" class="muted small-muted" aria-live="polite"></div>
+
+        <!-- Result area -->
+        <div id="resultArea" class="result-box" aria-live="polite">
+          <div class="small-muted">No result yet. Run a check to see the report here.</div>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px">
+          <button id="downloadReport" class="btn-ghost" disabled>Download JSON</button>
+          <button id="printReport" class="btn-ghost" disabled>Print</button>
+          <div style="flex:1"></div>
+          <div class="small-muted">Latency <span id="latency">—</span> · DB queries <span id="dbQueries">—</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: Submissions list -->
+    <aside class="card">
+      <h3 style="margin:0 0 8px 0">Submissions</h3>
+      <div class="muted small-muted" style="margin-bottom:8px">Select a submission to run checks or inspect saved reports.</div>
+
+      <div id="subList" class="list-scroll"></div>
+
+      <hr style="margin:12px 0">
+      <h4 style="margin:0 0 6px 0">Tips</h4>
+      <ul class="small-muted" style="padding-left:16px;margin:0">
+        <li>TF-IDF is quick; BERT captures paraphrasing (heavier).</li>
+        <li>Saved reports persist so you can compare later.</li>
+        <li>Use the side list to quickly select and run checks.</li>
+      </ul>
+    </aside>
+  </div>
+
+  <!-- Alerts / spinner -->
+  <div id="globalAlertContainer" aria-live="polite"></div>
+  <div id="spinnerOverlay"><div class="spinnerBox"><div class="spinner" aria-hidden="true"></div><div>Processing…</div></div></div>
+
+  <script>
+  /*****************************
+   * Small helpers (self-contained)
+   *****************************/
+  function getAccess(){ return localStorage.getItem('access'); }
+  function getRefresh(){ return localStorage.getItem('refresh'); }
+  function saveAccess(a){ if(a) localStorage.setItem('access', a); }
+  function clearAuth(){ localStorage.removeItem('access'); localStorage.removeItem('refresh'); }
+
+  function showAlert(msg, type='success', ms=4200){
+    const cont = document.getElementById('globalAlertContainer');
+    const el = document.createElement('div');
+    el.className = 'alert ' + (type==='error' ? 'error' : 'success');
+    el.textContent = msg;
+    cont.appendChild(el);
+    setTimeout(()=> el.style.opacity = '0', ms-400);
+    setTimeout(()=> el.remove(), ms);
+  }
+  function showSpinner(){ document.getElementById('spinnerOverlay').style.display = 'flex'; }
+  function hideSpinner(){ document.getElementById('spinnerOverlay').style.display = 'none'; }
+
+  // Simple JSON parse helper
+  async function parseResponse(res){
+    const text = await res.text();
+    try { return JSON.parse(text || null); } catch(e){ return text; }
+  }
+
+  // fetch wrapper that attempts one refresh on 401
+  async function fetchAuth(path, options = {}){
+    options.headers = options.headers || {};
+    // set Authorization if access token present
+    const token = getAccess();
+    if (token) options.headers['Authorization'] = 'Bearer ' + token;
+
+    // if body is plain object and not FormData, set JSON header
+    const isForm = options.body instanceof FormData;
+    if (!isForm && options.body && !(options.headers['Content-Type'])) {
+      options.headers['Content-Type'] = 'application/json';
+    }
+
+    let res = await fetch(path, options);
+    if (res.status === 401){
+      const refresh = getRefresh();
+      if (!refresh) { clearAuth(); window.location.href = '/login/'; throw new Error('Not authenticated'); }
+      // try refresh
+      try {
+        const r = await fetch('/api/users/token/refresh/', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ refresh })
+        });
+        if (r.ok){
+          const d = await r.json();
+          if (d.access) { saveAccess(d.access); options.headers['Authorization'] = 'Bearer ' + d.access; res = await fetch(path, options); }
+        } else {
+          clearAuth(); window.location.href = '/login/'; throw new Error('Session expired');
+        }
+      } catch (err){
+        clearAuth(); window.location.href = '/login/'; throw err;
+      }
+    }
+    const data = await parseResponse(res);
+    if (!res.ok) {
+      const err = new Error('API Error');
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
+    return data;
+  }
+
+  function escapeHtml(str){
+    if (str === undefined || str === null) return '';
+    return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[s]));
+  }
+
+  /*****************************
+   * UI logic
+   *****************************/
+  (function init(){
+    const sel = document.getElementById('selSubmission');
+    const selAlgo = document.getElementById('selAlgo');
+    const btnRun = document.getElementById('btnRun');
+    const btnView = document.getElementById('btnView');
+    const subList = document.getElementById('subList');
+    const resultArea = document.getElementById('resultArea');
+    const ctrlMsg = document.getElementById('ctrlMsg');
+    const downloadBtn = document.getElementById('downloadReport');
+    const printBtn = document.getElementById('printReport');
+    const latencyEl = document.getElementById('latency');
+    const dbQueriesEl = document.getElementById('dbQueries');
+
+    let lastPayload = null;
+    let submissions = [];
+
+    function setCtrlMsg(t, isErr=false){
+      ctrlMsg.textContent = t || '';
+      ctrlMsg.style.color = isErr ? '#9f1239' : '';
+    }
+
+    // fetch submissions list (professor view => professor endpoint; students see their own)
+    async function loadSubmissions(){
+      subList.innerHTML = '<div class="muted small-muted">Loading…</div>';
+      sel.innerHTML = '<option>Loading…</option>';
+      try {
+        // get user role (best-effort)
+        let role = 'unknown';
+        try {
+          const me = await fetchAuth('/api/users/me/');
+          role = me.role || role;
+        } catch(e){
+          // ignore — we still try to fetch professor endpoint first
+        }
+
+        let data;
+        // professor should use professor-specific endpoint
+        if (role === 'professor'){
+          try { data = await fetchAuth('/api/documents/submissions/professor/'); }
+          catch(e){ data = null; }
+        }
+        // fallback attempt: professor endpoint may be at /api/documents/submissions/
+        if (!data) {
+          try { data = await fetchAuth('/api/documents/submissions/'); }
+          catch(e){ /* later fallback to mine */ }
+        }
+        // if still nothing or role is student, fetch mine
+        if (!data || (Array.isArray(data) && data.length===0)){
+          try { data = await fetchAuth('/api/documents/submissions/mine/'); }
+          catch(e){ /* ok */ }
+        }
+
+        const list = Array.isArray(data) ? data : (data.results || []);
+        submissions = list || [];
+
+        if (!submissions.length){
+          subList.innerHTML = '<div class="muted small-muted">No submissions available.</div>';
+          sel.innerHTML = '<option value="">No submissions</option>';
+          return;
+        }
+
+        // populate side list and select
+        sel.innerHTML = '<option value="">-- choose submission --</option>';
+        subList.innerHTML = '';
+        submissions.forEach(s => {
+          const title = s.assignment?.title || s.assignment_title || `Assignment ${s.assignment || ''}`;
+          const studentName = s.student?.username || s.student_username || 'student';
+          const uploaded = s.uploaded_at || s.created || s.created_at || null;
+
+          // select option
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = `${title} — ${studentName}`;
+          sel.appendChild(opt);
+
+          // side row
+          const row = document.createElement('div');
+          row.className = 'submission-row';
+          row.innerHTML = `<div style="flex:1">
+                             <div style="font-weight:600">${escapeHtml(title)}</div>
+                             <div class="small-muted">By ${escapeHtml(studentName)} · ${uploaded ? new Date(uploaded).toLocaleString() : '—'}</div>
+                           </div>
+                           <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+                             <a href="${escapeHtml(s.document || '#')}" target="_blank" class="btn-ghost" style="padding:6px 8px">View</a>
+                             <div style="display:flex;gap:6px">
+                               <button class="btn" style="padding:6px 8px" onclick="selectAndRun(${s.id}, 'TF-IDF')">TF-IDF</button>
+                               <button class="btn-ghost" style="padding:6px 8px" onclick="selectAndRun(${s.id}, 'BERT')">BERT</button>
+                             </div>
+                           </div>`;
+          subList.appendChild(row);
+        });
+
+        setCtrlMsg('');
+      } catch (err) {
+        console.error('loadSubmissions error', err);
+        subList.innerHTML = '<div class="muted small-muted">Failed to load submissions.</div>';
+        sel.innerHTML = '<option value="">Failed to load</option>';
+      }
+    }
+
+    // run check (button)
+    btnRun.addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      setCtrlMsg('');
+      const id = sel.value;
+      if (!id){ setCtrlMsg('Please select a submission first.', true); return; }
+      await runPlagiarism(id, selAlgo.value);
+    });
+
+    // view saved result
+    btnView.addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      setCtrlMsg('');
+      const id = sel.value;
+      if (!id){ setCtrlMsg('Please select a submission to view saved result.', true); return; }
+      await viewSaved(id);
+    });
+
+    // helper to run & also used by side quick buttons
+    window.selectAndRun = async function(id, algo='TF-IDF'){
+      // select in dropdown to reflect UI
+      try {
+        sel.value = String(id);
+      } catch(e){}
+      await runPlagiarism(id, algo);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function runPlagiarism(submissionId, algorithm='TF-IDF'){
+      resultArea.innerHTML = '<div class="small-muted">Running check…</div>';
+      showSpinner();
+      try {
+        const payload = await fetchAuth(`/api/plagiarism/check/${submissionId}/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ algorithm })
+        });
+        hideSpinner();
+        if (!payload || !payload.result){ setCtrlMsg('No result returned from server.', true); return; }
+        lastPayload = payload;
+        latencyEl.textContent = payload.latency_seconds ?? '—';
+        dbQueriesEl.textContent = payload.db_queries ?? '—';
+        renderResult(payload);
+        downloadBtn.disabled = false;
+        printBtn.disabled = false;
+        showAlert('Plagiarism check completed', 'success');
+      } catch (err) {
+        hideSpinner();
+        console.error('runPlagiarism error', err);
+        setCtrlMsg('Plagiarism run failed. See console.', true);
+        showAlert('Plagiarism run failed', 'error');
+      }
+    }
+
+    async function viewSaved(submissionId){
+      resultArea.innerHTML = '<div class="small-muted">Loading saved result…</div>';
+      showSpinner();
+      try {
+        const saved = await fetchAuth(`/api/plagiarism/result/${submissionId}/`);
+        hideSpinner();
+        // saved is the serialized PlagiarismResult object
+        if (!saved){ resultArea.innerHTML = '<div class="small-muted">No saved result found.</div>'; return; }
+        const wrapper = { result: saved };
+        lastPayload = wrapper;
+        latencyEl.textContent = '—';
+        dbQueriesEl.textContent = '—';
+        renderResult(wrapper);
+        downloadBtn.disabled = false;
+        printBtn.disabled = false;
+      } catch (err) {
+        hideSpinner();
+        console.error('viewSaved err', err);
+        resultArea.innerHTML = '<div class="small-muted">Failed to load saved result.</div>';
+      }
+    }
+
+    // Render result (payload = { result: {...}, latency_seconds, db_queries })
+    function renderResult(payload){
+      const res = payload.result || payload;
+      const score = Number(res.similarity_score ?? res.similarity ?? 0);
+      const algo = res.algorithm || 'TF-IDF';
+      const compared = res.compared_with || res.compared_with_ids || res.compared || 'N/A';
+
+      // header + chart + matches
+      const level = score >= 70 ? 'High' : (score >= 40 ? 'Moderate' : 'Low');
+      let html = `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+                    <div>
+                      <h3 style="margin:0">${escapeHtml(algo)} result — <span style="color:#0f172a">${score.toFixed(2)}%</span></h3>
+                      <div class="meta" style="margin-top:6px">
+                        <div>Level: <strong>${level}</strong></div>
+                        <div>Compared with: <strong>${escapeHtml(String(compared))}</strong></div>
+                      </div>
+                    </div>
+                    <div style="min-width:220px">
+                      <canvas id="simChart" width="220" height="90" aria-hidden="true"></canvas>
+                      <div style="text-align:right;font-size:13px;color:var(--muted)">${res.algorithm ? escapeHtml(res.algorithm) : ''}</div>
+                    </div>
+                  </div>`;
+
+      // detailed matches
+      const report = res.report || [];
+      if (Array.isArray(report) && report.length){
+        html += '<div style="margin-top:12px"><h4 style="margin:0 0 8px 0">Matches</h4>';
+        report.forEach(r => {
+          html += `<div style="padding:8px;border-radius:8px;background:#fbfbff;margin-bottom:8px">
+                     <div class="small-muted">Compared with submission: <strong>${escapeHtml(String(r.compared_with))}</strong></div>`;
+          (r.matches || []).forEach(m => {
+            const excerpt = escapeHtml(m.doc1 ?? m.doc2 ?? m.text ?? '');
+            html += `<p style="margin:6px 0"><strong>→</strong> ${excerpt}</p>`;
+          });
+          html += `</div>`;
+        });
+        html += '</div>';
+      } else {
+        html += '<div style="margin-top:12px" class="small-muted">No detailed matches found.</div>';
+      }
+
+      if (payload.latency_seconds !== undefined){
+        html += `<div style="margin-top:10px" class="small-muted">Latency: ${payload.latency_seconds}s · DB queries: ${payload.db_queries}</div>`;
+      }
+
+      resultArea.innerHTML = html;
+
+      // draw small bar chart
+      const canvas = document.getElementById('simChart');
+      if (canvas && canvas.getContext){
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width, h = canvas.height;
+        ctx.clearRect(0,0,w,h);
+        // background bar
+        ctx.fillStyle = '#eef2ff';
+        ctx.fillRect(10, h/2 - 12, w-20, 24);
+        // filled
+        const pct = Math.max(0, Math.min(100, score));
+        ctx.fillStyle = (pct >= 70 ? '#dc2626' : pct >= 40 ? '#f59e0b' : '#10b981');
+        ctx.fillRect(10, h/2 - 12, (w-20) * (pct/100), 24);
+        // text
+        ctx.fillStyle = '#0f172a';
+        ctx.font = '14px system-ui, Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${pct.toFixed(2)}%`, w/2, h/2 + 5);
+      }
+    }
+
+    // download & print
+    downloadBtn.addEventListener('click', () => {
+      if (!lastPayload) return;
+      const blob = new Blob([JSON.stringify(lastPayload, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `plagiarism_report_${Date.now()}.json`; a.click();
+      URL.revokeObjectURL(url);
+    });
+    printBtn.addEventListener('click', () => {
+      if (!lastPayload) return;
+      const win = window.open('', '_blank');
+      win.document.write('<html><head><title>Plagiarism Report</title></head><body>');
+      win.document.write(resultArea.innerHTML);
+      win.document.write('</body></html>');
+      win.document.close();
+      win.print();
+    });
+
+    // logout button
+    document.getElementById('logoutBtn').addEventListener('click', (e)=>{
+      e.preventDefault();
+      clearAuth();
+      window.location.href = '/login/';
+    });
+
+    // initial load
+    loadSubmissions();
+
+    // expose some functions for convenience in dev console
+    window.plagiarismReload = loadSubmissions;
+    window.viewSaved = viewSaved;
+    window.runPlagiarism = runPlagiarism;
+  })();
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Dashboard | AI Plagiarism Detection</title>
+  <style>
+    :root{
+      --accent:#2563eb; --muted:#6b7280; --card:#fff; --bg:#f7f9fc;
+    }
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:#0f172a}
+    header{background:var(--card);box-shadow:0 1px 4px rgba(0,0,0,.08);padding:14px 20px;display:flex;justify-content:space-between;align-items:center}
+    .brand{font-weight:700;color:var(--accent);font-size:1.15rem}
+    nav a{margin-left:14px;text-decoration:none;color:#111;font-weight:500}
+    nav a:hover{color:var(--accent)}
+    .wrap{max-width:1200px;margin:20px auto;padding:0 16px;display:grid;gap:20px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+    .card{background:var(--card);padding:20px;border-radius:12px;box-shadow:0 6px 18px rgba(16,24,40,0.06)}
+    h2,h3{margin:0 0 8px}
+    .muted{color:var(--muted);font-size:14px}
+    .btn{background:var(--accent);color:#fff;padding:8px 12px;border-radius:8px;border:0;text-decoration:none;cursor:pointer;display:inline-block;font-size:14px}
+    .btn:hover{background:#1e40af}
+    canvas{width:100%;height:160px;display:block}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">AI-Plagiarism</div>
+    <nav>
+      <a href="/student/">Student</a>
+      <a href="/professor/">Professor</a>
+      <a href="/plagiarism/">Plagiarism</a>
+      <a href="/profile/">Profile</a>
+      <a href="/logout/">Logout</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <!-- Welcome -->
+    <div class="card">
+      <h2>Welcome back 👋</h2>
+      <p class="muted" id="welcomeMsg">Loading user details…</p>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="grid">
+      <div class="card">
+        <h3>📄 Assignments</h3>
+        <p class="muted">View assignments (for students) or create new ones (for professors).</p>
+        <a id="assignLink" href="/student/" class="btn">Go to Assignments</a>
+      </div>
+      <div class="card">
+        <h3>📂 Submissions</h3>
+        <p class="muted">Upload your work, view feedback, or check student submissions.</p>
+        <a id="subLink" href="/student/" class="btn">Go to Submissions</a>
+      </div>
+      <div class="card">
+        <h3>🔍 Plagiarism</h3>
+        <p class="muted">Run plagiarism checks and analyze similarity reports.</p>
+        <a href="/plagiarism/" class="btn">Plagiarism Dashboard</a>
+      </div>
+    </div>
+
+    <!-- Activity + Chart -->
+    <div class="grid">
+      <div class="card">
+        <h3>📊 Recent Activity</h3>
+        <ul id="activityList" class="muted" style="padding-left:18px;margin:0">
+          <li>Loading activity…</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>📈 Plagiarism Trends</h3>
+        <canvas id="trendChart"></canvas>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+  // -------- Auth utils --------
+  function getAccess(){return localStorage.getItem("access");}
+  function clearAuth(){localStorage.clear();}
+  async function apiFetch(url, opts={}){
+    opts.headers=opts.headers||{};
+    opts.headers["Authorization"]="Bearer "+getAccess();
+    let r=await fetch(url,opts);
+    if(r.status===401){clearAuth();location.href="/login/";}
+    return r.json();
+  }
+
+  // -------- Load user + role --------
+  async function loadUser(){
+    try{
+      const me=await apiFetch("/api/users/me/");
+      document.getElementById("welcomeMsg").textContent=`Logged in as ${me.username} (${me.role})`;
+      if(me.role==="professor"){
+        document.getElementById("assignLink").href="/professor/";
+        document.getElementById("subLink").href="/professor/";
+      }
+      return me.role;
+    }catch(e){
+      document.getElementById("welcomeMsg").textContent="Unable to load user.";
+    }
+  }
+
+  // -------- Activity + Chart --------
+  async function loadActivity(role){
+    try{
+      let data=[];
+      if(role==="student"){
+        data=await apiFetch("/api/documents/submissions/mine/");
+      }else if(role==="professor"){
+        data=await apiFetch("/api/documents/submissions/professor/");
+      }
+      const list=document.getElementById("activityList");
+      list.innerHTML="";
+      if(!data.length){list.innerHTML="<li>No recent activity.</li>";return;}
+      data.slice(0,5).forEach(s=>{
+        const li=document.createElement("li");
+        li.textContent=`Submission #${s.id} for assignment ${s.assignment}`;
+        list.appendChild(li);
+      });
+      renderChart(data);
+    }catch(err){console.error(err);}
+  }
+
+  function renderChart(subs){
+    const ctx=document.getElementById("trendChart");
+    if(!ctx)return;
+    const labels=subs.slice(-5).map(s=>`#${s.id}`);
+    const scores=subs.slice(-5).map(s=>s.similarity_score||0);
+    new Chart(ctx,{
+      type:"line",
+      data:{labels,datasets:[{label:"Similarity %",data:scores,borderColor:"#2563eb",backgroundColor:"rgba(37,99,235,0.2)",tension:0.2}]},
+      options:{scales:{y:{beginAtZero:true,max:100}}}
+    });
+  }
+
+  (async ()=>{
+    const role=await loadUser();
+    if(role) loadActivity(role);
+  })();
+  </script>
+</body>
+</html>

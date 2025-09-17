@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Logout | AI Plagiarism Detection</title>
+  <style>
+    body {
+      font-family: Inter, system-ui, sans-serif;
+      background: linear-gradient(135deg, #2563eb, #1e40af);
+      margin: 0; display: flex; justify-content: center; align-items: center;
+      height: 100vh; color: #111;
+    }
+    .card {
+      background: #fff; padding: 36px; border-radius: 14px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+      max-width: 420px; text-align: center; animation: fadeIn 0.4s ease;
+    }
+    h2 { margin-top: 0; color: #2563eb; font-size: 1.6rem; }
+    p { color: #374151; margin: 14px 0 24px; font-size: 15px; }
+    .btn {
+      display: inline-block; background: #2563eb; color: #fff; border: none;
+      padding: 12px 20px; border-radius: 8px; cursor: pointer;
+      font-weight: 500; text-decoration: none; font-size: 14px;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn:hover { background: #1e40af; transform: translateY(-1px); }
+    .spinner {
+      width: 30px; height: 30px; border: 3px solid #e5e7eb;
+      border-top-color: #2563eb; border-radius: 50%;
+      margin: 18px auto; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from {opacity:0; transform:scale(0.96);} to {opacity:1; transform:scale(1);} }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🔒 Logging Out…</h2>
+    <p>We’re securely ending your session. You’ll be redirected shortly.</p>
+    <div class="spinner"></div>
+    <p class="muted">If nothing happens, click below:</p>
+    <a href="/login/" class="btn">Back to Login</a>
+  </div>
+
+  <script>
+    // ✅ Clear tokens from storage
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // ✅ Optional backend logout
+    async function logoutBackend() {
+      try {
+        const refresh = localStorage.getItem("refresh");
+        if (refresh) {
+          await fetch("/api/users/logout/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh })
+          });
+        }
+      } catch (err) {
+        console.warn("Logout API failed:", err);
+      }
+    }
+    logoutBackend();
+
+    // ✅ Redirect to login page
+    setTimeout(() => {
+      window.location.href = "/login/";
+    }, 1800);
+  </script>
+</body>
+</html>

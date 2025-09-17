@@ -1,0 +1,35 @@
+# Core Django
+Django>=5.2,<6.0
+
+# Django REST Framework
+djangorestframework>=3.15
+djangorestframework-simplejwt>=5.3
+
+# API Documentation
+drf-yasg>=1.21.7
+
+# Environment variables
+python-decouple>=3.8
+django-environ>=0.11.2
+
+# NLP / ML
+numpy>=1.26
+scikit-learn>=1.5
+nltk>=3.9
+
+# AI (BERT embeddings)
+sentence-transformers>=3.0.1
+
+# PDF/Text processing
+pypdf>=5.1.0
+
+# CORS
+django-cors-headers>=4.3
+
+# Testing
+pytest>=8.4
+pytest-django>=4.11
+pytest-cov>=7.0
+
+# Logging utilities
+loguru>=0.7

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Login | AI Plagiarism Detection</title>
+  <style>
+    body {
+      font-family: Inter, system-ui, sans-serif;
+      background: linear-gradient(135deg, #2563eb, #1e40af);
+      margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh;
+    }
+    .card {
+      background: #fff; padding: 32px; border-radius: 14px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+      width: 100%; max-width: 400px; animation: fadeIn 0.3s ease;
+    }
+    h2 { margin-top: 0; color: #2563eb; text-align: center; }
+    label { display: block; margin-bottom: 14px; font-size: 14px; color: #374151; }
+    input {
+      width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px;
+      margin-top: 6px; font-size: 14px; transition: border-color 0.2s;
+    }
+    input:focus { border-color: #2563eb; outline: none; }
+    button {
+      width: 100%; background: #2563eb; color: #fff; border: none;
+      padding: 12px; border-radius: 8px; font-size: 15px; cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    button:hover { background: #1e40af; transform: translateY(-1px); }
+    .muted { font-size: 13px; color: #6b7280; margin-top: 14px; text-align: center; }
+    .error { color: #b91c1c; font-size: 13px; margin: 10px 0; text-align: center; }
+    .loading { font-size: 13px; color: #2563eb; margin: 10px 0; text-align: center; }
+    @keyframes fadeIn { from {opacity:0; transform:scale(0.96);} to {opacity:1; transform:scale(1);} }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🔑 Login</h2>
+    <form id="loginForm">
+      <label>Username
+        <input type="text" id="username" required placeholder="Enter your username">
+      </label>
+      <label>Password
+        <input type="password" id="password" required placeholder="Enter your password">
+      </label>
+      <button type="submit">Login</button>
+      <div id="msg"></div>
+    </form>
+    <div class="muted">
+      Don’t have an account? <a href="/register/">Register</a>
+    </div>
+  </div>
+
+<script>
+  const form = document.getElementById("loginForm");
+  const msg = document.getElementById("msg");
+
+  function setMsg(text, type = "error") {
+    msg.textContent = text;
+    msg.className = type;
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    setMsg("⏳ Logging in...", "loading");
+
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value.trim();
+
+    try {
+      // 🔑 Login request (username + password only)
+      const res = await fetch("/api/users/login/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMsg(data.detail || "❌ Login failed. Check credentials.", "error");
+        return;
+      }
+
+      // ✅ Save tokens
+      localStorage.setItem("access", data.access);
+      localStorage.setItem("refresh", data.refresh);
+
+      // 🔍 Fetch user details to get role
+      const meRes = await fetch("/api/users/me/", {
+        headers: { "Authorization": "Bearer " + data.access }
+      });
+      const me = await meRes.json();
+
+      if (!meRes.ok || !me.role) {
+        setMsg("⚠️ Could not fetch user role.", "error");
+        return;
+      }
+
+      localStorage.setItem("role", me.role);
+
+      // ✅ Redirect by role
+      if (me.role === "student") {
+        window.location.href = "/student/";
+      } else if (me.role === "professor") {
+        window.location.href = "/professor/";
+      } else {
+        window.location.href = "/dashboard/";
+      }
+
+    } catch (err) {
+      console.error(err);
+      setMsg("⚠️ Error connecting to server.", "error");
+    }
+  });
+</script>
+
+</body>
+</html>
