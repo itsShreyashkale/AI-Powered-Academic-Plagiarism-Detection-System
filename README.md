@@ -97,7 +97,7 @@ pytest -q
 
 - **Backend**: Django, Django REST Framework
 - **Auth**: JWT (SimpleJWT)
-- **Database**: SQLite (default, can switch to Postgres/MySQL)
+- **Database**: MsSQL (default, can switch to Postgres or more)
 - **Plagiarism Engine**: scikit-learn (TF-IDF), NLTK, optional Sentence-BERT
 - **Frontend**: HTML + CSS + Vanilla JS
 - **Testing**: pytest, pytest-django
