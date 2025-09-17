@@ -33,3 +33,6 @@ pytest-cov>=7.0
 
 # Logging utilities
 loguru>=0.7
+
+# mysql
+# mysqlclient
