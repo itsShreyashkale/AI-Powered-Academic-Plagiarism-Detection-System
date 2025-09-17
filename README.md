@@ -50,7 +50,7 @@ AI-Powered Academic Plagiarism Detection System/
 ### 1. Clone repo
 
 ```bash
-git clone https://github.com/yourusername/AI-Plagiarism-Detection.git
+git clone https://github.com/itsShreyashkale/AI-Powered-Academic-Plagiarism-Detection-System.git
 cd AI-Plagiarism-Detection
 ```
 
